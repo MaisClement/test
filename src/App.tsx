@@ -10,12 +10,16 @@ import {
   type OnConnect,
   type NodeChange,
   Panel,
+  type ReactFlowInstance,
+  type Edge,
 } from '@xyflow/react';
+import dagre from '@dagrejs/dagre';
 
 import '@xyflow/react/dist/style.css';
 
 import { initialNodes, nodeTypes, AppNode } from './nodes';
 import { initialEdges, edgeTypes } from './edges';
+import { EdgeTypeSelector } from './components/EdgeTypeSelector';
 
 interface HelperLine {
   id: string;
@@ -30,15 +34,25 @@ const SNAP_THRESHOLD = 5; // Tolérance en pixels pour afficher les lignes
 
 export default function App() {
   const edgeReconnectSuccessful = useRef(true);
+  const reactFlowInstanceRef = useRef<ReactFlowInstance<AppNode, Edge> | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesState] = useEdgesState(initialEdges);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null); // État pour l'ID du nœud sélectionné
   const [helperLines, setHelperLines] = useState<HelperLine[]>([]);
+  const [isEdgeTypeSelectorOpen, setIsEdgeTypeSelectorOpen] = useState(false);
+  const [pendingConnection, setPendingConnection] = useState<{ source: string; target: string } | null>(null);
 
 
   const onConnect: OnConnect = useCallback(
-    (connection) => setEdges((edges) => addEdge(connection, edges)),
-    [setEdges]
+    (connection) => {
+      // Au lieu de créer directement l'edge, on stocke la connection et on ouvre le sélecteur
+      setPendingConnection({
+        source: connection.source || '',
+        target: connection.target || ''
+      });
+      setIsEdgeTypeSelectorOpen(true);
+    },
+    [setPendingConnection, setIsEdgeTypeSelectorOpen]
   );
 
   const onReconnectStart = useCallback(() => {
@@ -91,8 +105,8 @@ export default function App() {
             }
           }
 
-          const draggingNodeWidth = typeof draggingNode.width === 'number' ? draggingNode.width : (typeof draggingNode.style?.width === 'number' ? draggingNode.style.width : 150);
-          const draggingNodeHeight = typeof draggingNode.height === 'number' ? draggingNode.height : (typeof draggingNode.style?.height === 'number' ? draggingNode.style.height : 40);
+          const draggingNodeWidth = typeof draggingNode.width === 'number' ? draggingNode.width : 150;
+          const draggingNodeHeight = typeof draggingNode.height === 'number' ? draggingNode.height : 40;
 
           let snappedAbsoluteX = initialAbsoluteX;
           let snappedAbsoluteY = initialAbsoluteY;
@@ -254,8 +268,8 @@ export default function App() {
                   { drag: draggingNodeTop, target: targetTop, label: 'top-top' },
                   { drag: draggingNodeBottom, target: targetBottom, label: 'bottom-bottom' },
                   { drag: draggingNodeCenterY, target: targetCenterY, label: 'center-center-y' },
-                  { drag: draggingNodeTop, target: targetBottom, label: 'top-bottom' },
-                  { drag: draggingNodeBottom, target: targetTop, label: 'bottom-top' },
+                  { drag: draggingNodeTop, target: targetBottom, snapTo: targetBottom, label: 'top-bottom' },
+                  { drag: draggingNodeBottom, target: targetTop, snapTo: targetTop - draggingNodeHeight, label: 'bottom-top' },
               ];
 
               horizontalChecks.forEach(check => {
@@ -386,8 +400,369 @@ export default function App() {
     setSelectedNodeId(null); // Désélectionner après la suppression
   }, [selectedNodeId, setNodes, setEdges]);
 
+  // Reorganize nodes handler
+  const handleReorganizeNodes = useCallback(() => {
+    setNodes((currentNodes) => {
+      const updatedNodes = [...currentNodes];
+      
+      // Find all group nodes
+      const groupNodes = updatedNodes.filter(node => node.type === 'group');
+      
+      groupNodes.forEach(group => {
+        // Find all nodes that belong to this group
+        const groupChildren = updatedNodes.filter(node => node.parentId === group.id);
+        
+        if (groupChildren.length === 0) return;
+        
+        // Get group dimensions
+        const groupWidth = typeof group.width === 'number' ? group.width : 200;
+        const groupHeight = typeof group.height === 'number' ? group.height : 200;
+        
+        // Determine orientation based on group aspect ratio
+        const isHorizontalLayout = groupWidth > groupHeight;
+        
+        // Calculate dimensions for each child node and sort them to preserve order
+        const childrenWithDimensions = groupChildren.map(child => {
+          const childWidth = typeof child.width === 'number' ? child.width : 
+                            typeof child.style?.width === 'number' ? child.style.width : 150;
+          const childHeight = typeof child.height === 'number' ? child.height : 
+                             typeof child.style?.height === 'number' ? child.style.height : 40;
+          return { ...child, calculatedWidth: childWidth, calculatedHeight: childHeight };
+        });
+        
+        // Sort children based on the layout orientation to preserve order
+        if (isHorizontalLayout) {
+          // For horizontal layout, sort by current X position (left to right)
+          childrenWithDimensions.sort((a, b) => a.position.x - b.position.x);
+        } else {
+          // For vertical layout, sort by current Y position (top to bottom)
+          childrenWithDimensions.sort((a, b) => a.position.y - b.position.y);
+        }
+        
+        // Marges: 30px pour le premier nœud, 10px pour les autres côtés
+        const topMargin = 40;
+        const sideMargin = 10;
+        const bottomMargin = 10;
+        const uniformSpacing = 10; // Espacement uniforme entre tous les nœuds
+        
+        // Calculer les dimensions nécessaires pour le groupe
+        const maxNodeWidth = Math.max(...childrenWithDimensions.map(child => child.calculatedWidth));
+        const maxNodeHeight = Math.max(...childrenWithDimensions.map(child => child.calculatedHeight));
+        const totalNodeWidth = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedWidth, 0);
+        const totalNodeHeight = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedHeight, 0);
+        const totalSpacingNeeded = (childrenWithDimensions.length - 1) * uniformSpacing;
+        
+        let newGroupWidth: number;
+        let newGroupHeight: number;
+        
+        if (isHorizontalLayout) {
+          // Pour un layout horizontal: largeur = somme des largeurs + espacement + marges
+          newGroupWidth = totalNodeWidth + totalSpacingNeeded + (2 * sideMargin);
+          // Hauteur = hauteur du plus grand nœud + marges
+          newGroupHeight = maxNodeHeight + topMargin + bottomMargin;
+          
+          // Position nodes horizontally
+          let currentX = sideMargin;
+          childrenWithDimensions.forEach(child => {
+            const nodeIndex = updatedNodes.findIndex(n => n.id === child.id);
+            if (nodeIndex !== -1) {
+              // Centrer chaque nœud verticalement par rapport au plus grand nœud
+              const nodeY = topMargin + (maxNodeHeight - child.calculatedHeight) / 2;
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                position: {
+                  x: currentX,
+                  y: nodeY
+                }
+              };
+            }
+            currentX += child.calculatedWidth + uniformSpacing;
+          });
+          
+        } else {
+          // Pour un layout vertical: largeur = largeur du plus grand nœud + marges
+          newGroupWidth = maxNodeWidth + (2 * sideMargin);
+          // Hauteur = somme des hauteurs + espacement + marges
+          newGroupHeight = totalNodeHeight + totalSpacingNeeded + topMargin + bottomMargin;
+          
+          // Position nodes vertically
+          let currentY = topMargin;
+          childrenWithDimensions.forEach(child => {
+            const nodeIndex = updatedNodes.findIndex(n => n.id === child.id);
+            if (nodeIndex !== -1) {
+              // Centrer chaque nœud horizontalement par rapport au plus grand nœud
+              const nodeX = sideMargin + (maxNodeWidth - child.calculatedWidth) / 2;
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                position: {
+                  x: nodeX,
+                  y: currentY
+                }
+              };
+            }
+            currentY += child.calculatedHeight + uniformSpacing;
+          });
+        }
+        
+        // Redimensionner le groupe aux nouvelles dimensions calculées
+        const groupIndex = updatedNodes.findIndex(n => n.id === group.id);
+        if (groupIndex !== -1) {
+          updatedNodes[groupIndex] = {
+            ...updatedNodes[groupIndex],
+            width: newGroupWidth,
+            height: newGroupHeight
+          };
+        }
+      });
+      
+      return updatedNodes;
+    });
+  }, [setNodes]);
+
+  // Reorganize all nodes and groups handler using dagre layout
+  const handleReorganizeAll = useCallback(() => {
+    setNodes((currentNodes) => {
+      const updatedNodes = [...currentNodes];
+      
+      // 1. D'abord, réorganiser tous les groupes avec la même logique que handleReorganizeNodes
+      const groupNodes = updatedNodes.filter(node => node.type === 'group');
+      
+      groupNodes.forEach(group => {
+        const groupChildren = updatedNodes.filter(node => node.parentId === group.id);
+        
+        if (groupChildren.length === 0) return;
+        
+        const groupWidth = typeof group.width === 'number' ? group.width : 200;
+        const groupHeight = typeof group.height === 'number' ? group.height : 200;
+        const isHorizontalLayout = groupWidth > groupHeight;
+        
+        const childrenWithDimensions = groupChildren.map(child => {
+          const childWidth = typeof child.width === 'number' ? child.width : 
+                            typeof child.style?.width === 'number' ? child.style.width : 150;
+          const childHeight = typeof child.height === 'number' ? child.height : 
+                             typeof child.style?.height === 'number' ? child.style.height : 40;
+          return { ...child, calculatedWidth: childWidth, calculatedHeight: childHeight };
+        });
+        
+        if (isHorizontalLayout) {
+          childrenWithDimensions.sort((a, b) => a.position.x - b.position.x);
+        } else {
+          childrenWithDimensions.sort((a, b) => a.position.y - b.position.y);
+        }
+        
+        const topMargin = 40;
+        const sideMargin = 10;
+        const bottomMargin = 10;
+        const uniformSpacing = 10;
+        
+        const maxNodeWidth = Math.max(...childrenWithDimensions.map(child => child.calculatedWidth));
+        const maxNodeHeight = Math.max(...childrenWithDimensions.map(child => child.calculatedHeight));
+        const totalNodeWidth = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedWidth, 0);
+        const totalNodeHeight = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedHeight, 0);
+        const totalSpacingNeeded = (childrenWithDimensions.length - 1) * uniformSpacing;
+        
+        let newGroupWidth: number;
+        let newGroupHeight: number;
+        
+        if (isHorizontalLayout) {
+          newGroupWidth = totalNodeWidth + totalSpacingNeeded + (2 * sideMargin);
+          newGroupHeight = maxNodeHeight + topMargin + bottomMargin;
+          
+          let currentX = sideMargin;
+          childrenWithDimensions.forEach(child => {
+            const nodeIndex = updatedNodes.findIndex(n => n.id === child.id);
+            if (nodeIndex !== -1) {
+              const nodeY = topMargin + (maxNodeHeight - child.calculatedHeight) / 2;
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                position: { x: currentX, y: nodeY }
+              };
+            }
+            currentX += child.calculatedWidth + uniformSpacing;
+          });
+        } else {
+          newGroupWidth = maxNodeWidth + (2 * sideMargin);
+          newGroupHeight = totalNodeHeight + totalSpacingNeeded + topMargin + bottomMargin;
+          
+          let currentY = topMargin;
+          childrenWithDimensions.forEach(child => {
+            const nodeIndex = updatedNodes.findIndex(n => n.id === child.id);
+            if (nodeIndex !== -1) {
+              const nodeX = sideMargin + (maxNodeWidth - child.calculatedWidth) / 2;
+              updatedNodes[nodeIndex] = {
+                ...updatedNodes[nodeIndex],
+                position: { x: nodeX, y: currentY }
+              };
+            }
+            currentY += child.calculatedHeight + uniformSpacing;
+          });
+        }
+        
+        const groupIndex = updatedNodes.findIndex(n => n.id === group.id);
+        if (groupIndex !== -1) {
+          updatedNodes[groupIndex] = {
+            ...updatedNodes[groupIndex],
+            width: newGroupWidth,
+            height: newGroupHeight
+          };
+        }
+      });
+
+      // 2. Utiliser dagre pour organiser les nœuds de niveau supérieur (sans parentId)
+      const topLevelNodes = updatedNodes.filter(node => !node.parentId);
+      
+      if (topLevelNodes.length > 0) {
+        // Créer un graphe dagre
+        const dagreGraph = new dagre.graphlib.Graph();
+        dagreGraph.setDefaultEdgeLabel(() => ({}));
+        
+        // Configuration du layout
+        dagreGraph.setGraph({
+          rankdir: 'TB', // Top to Bottom (hiérarchie verticale)
+          align: 'UL',   // Alignement en haut à gauche
+          nodesep: 150,  // Espacement horizontal entre nœuds
+          ranksep: 200,  // Espacement vertical entre niveaux
+          marginx: 50,   // Marge horizontale
+          marginy: 50    // Marge verticale
+        });
+        
+        // Ajouter tous les nœuds de niveau supérieur au graphe
+        topLevelNodes.forEach(node => {
+          const nodeWidth = typeof node.width === 'number' ? node.width : 
+                           typeof node.style?.width === 'number' ? node.style.width : 150;
+          const nodeHeight = typeof node.height === 'number' ? node.height : 
+                            typeof node.style?.height === 'number' ? node.style.height : 40;
+          
+          dagreGraph.setNode(node.id, {
+            width: nodeWidth,
+            height: nodeHeight
+          });
+        });
+        
+        // Ajouter les edges qui connectent les nœuds de niveau supérieur
+        edges.forEach(edge => {
+          const sourceNode = topLevelNodes.find(n => n.id === edge.source);
+          const targetNode = topLevelNodes.find(n => n.id === edge.target);
+          
+          if (sourceNode && targetNode) {
+            dagreGraph.setEdge(edge.source, edge.target);
+          }
+        });
+        
+        // Calculer le layout
+        dagre.layout(dagreGraph);
+        
+        // Appliquer les nouvelles positions
+        topLevelNodes.forEach(node => {
+          const nodeWithPosition = dagreGraph.node(node.id);
+          const nodeIndex = updatedNodes.findIndex(n => n.id === node.id);
+          
+          if (nodeIndex !== -1 && nodeWithPosition) {
+            // dagre donne les coordonnées du centre du nœud, 
+            // il faut les convertir en coordonnées du coin supérieur gauche
+            const nodeWidth = typeof node.width === 'number' ? node.width : 
+                             typeof node.style?.width === 'number' ? node.style.width : 150;
+            const nodeHeight = typeof node.height === 'number' ? node.height : 
+                              typeof node.style?.height === 'number' ? node.style.height : 40;
+            
+            updatedNodes[nodeIndex] = {
+              ...updatedNodes[nodeIndex],
+              position: {
+                x: nodeWithPosition.x - nodeWidth / 2,
+                y: nodeWithPosition.y - nodeHeight / 2
+              }
+            };
+          }
+        });
+      }
+      
+      // S'assurer que les groupes sont en arrière-plan
+      return [
+        ...updatedNodes.filter((n) => n.type === 'group'),
+        ...updatedNodes.filter((n) => n.type !== 'group'),
+      ];
+    });
+  }, [setNodes, edges]);
+
+  // Fit view handler
+  const handleFitView = useCallback(() => {
+    if (reactFlowInstanceRef.current) {
+      reactFlowInstanceRef.current.fitView();
+    }
+  }, []);
+
+  // Handler for ReactFlow instance initialization
+  const onInit = useCallback((reactFlowInstance: ReactFlowInstance<AppNode, Edge>) => {
+    reactFlowInstanceRef.current = reactFlowInstance;
+  }, []);
+
+  const handleEdgeTypeSelect = useCallback((edgeType: string) => {
+    if (pendingConnection) {
+      const newEdge: Edge = {
+        id: `edge-${Date.now()}`,
+        source: pendingConnection.source,
+        target: pendingConnection.target,
+        type: edgeType,
+        reconnectable: true,
+        data: {
+          centerLabel: getDefaultLabel(edgeType)
+        }
+      };
+      
+      setEdges((edges) => addEdge(newEdge, edges));
+    }
+    
+    // Nettoyer les états
+    setPendingConnection(null);
+    setIsEdgeTypeSelectorOpen(false);
+  }, [pendingConnection, setEdges]);
+
+  const handleEdgeTypeSelectorCancel = useCallback(() => {
+    setPendingConnection(null);
+    setIsEdgeTypeSelectorOpen(false);
+  }, []);
+
+  const getDefaultLabel = (edgeType: string): string => {
+    const labelMap: { [key: string]: string } = {
+      cft: 'CFT Transfer',
+      mq: 'MQ Message Queue',
+      api: 'API Integration',
+      kafka_pub: 'Kafka Publisher',
+      kafka_sub: 'Kafka Subscriber',
+      manual: 'Manual Entry',
+      external: 'External Entry'
+    };
+    return labelMap[edgeType] || 'Custom Edge';
+  };
+
   return (
     <>
+      {/* Bouton Fit View en dehors de ReactFlow */}
+      <div style={{ 
+        position: 'absolute', 
+        top: '10px', 
+        left: '10px', 
+        zIndex: 10,
+        backgroundColor: 'white',
+        padding: '5px',
+        borderRadius: '4px',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}>
+        <button 
+          onClick={handleFitView} 
+          style={{ 
+            backgroundColor: '#0066cc', 
+            color: 'white', 
+            border: 'none', 
+            padding: '8px 12px', 
+            borderRadius: '4px', 
+            cursor: 'pointer' 
+          }}
+        >
+          Fit View
+        </button>
+      </div>
+      
       <ReactFlow
         nodes={nodes}
         nodeTypes={nodeTypes}
@@ -399,11 +774,20 @@ export default function App() {
         onReconnectStart={onReconnectStart}
         onReconnectEnd={onReconnectEnd}
         onConnect={onConnect}
+        onInit={onInit}
+        reconnectRadius={20}
+        defaultEdgeOptions={{ reconnectable: true }}
         fitView
       >
         <Panel position="top-right">
           <button onClick={handleDebug} style={{ zIndex: 10, marginRight: '10px' }}>
             Debug Nodes & Edges
+          </button>
+          <button onClick={handleReorganizeNodes} style={{ zIndex: 10, marginRight: '10px', backgroundColor: '#0066cc', color: 'white' }}>
+            Reorganize Groups
+          </button>
+          <button onClick={handleReorganizeAll} style={{ zIndex: 10, marginRight: '10px', backgroundColor: '#00cc66', color: 'white' }}>
+            Reorganize All
           </button>
           {selectedNodeId && (
             <button onClick={handleDeleteNode} style={{ zIndex: 10, backgroundColor: 'red', color: 'white' }}>
@@ -431,6 +815,14 @@ export default function App() {
           />
         ))}
       </svg>
+      
+      <EdgeTypeSelector
+        isOpen={isEdgeTypeSelectorOpen}
+        onSelect={handleEdgeTypeSelect}
+        onCancel={handleEdgeTypeSelectorCancel}
+        sourceNodeType={pendingConnection ? nodes.find(n => n.id === pendingConnection.source)?.type : undefined}
+        targetNodeType={pendingConnection ? nodes.find(n => n.id === pendingConnection.target)?.type : undefined}
+      />
     </>
   );
 }
