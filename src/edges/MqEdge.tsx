@@ -10,7 +10,7 @@ export const MqEdge: React.FC<EdgeProps> = (props) => {
     <BaseCustomEdge
       {...props}
       data={data}
-      height="wide"
+      height="default"
       color="grey"
       hasStartMarker={false}
       hasEndMarker={true}

@@ -8,81 +8,153 @@ import { ManualEdge } from './ManualEdge';
 import { ExternalEdge } from './ExternalEdge';
 
 export const initialEdges: Edge[] = [
+  // Connexions API (bleu/turquoise) entre les composants
   {
-    id: 'demo-cft',
-    source: 'source',
-    target: 'cft-target',
-    type: 'cft',
-    reconnectable: true,
-    data: {
-      fromControlMJob: 'BATCH_JOB_001',
-      toControlM: 'CTRL_M_PROD',
-      fromPath: '/source/data',
-      toPath: '/target/processed',
-      centerLabel: 'CFT Transfer'
-    }
-  },
-  {
-    id: 'demo-mq',
-    source: 'cft-target',
-    target: 'mq-target',
-    type: 'mq',
-    reconnectable: true,
-    data: {
-      centerLabel: 'MQ Message Queue'
-    }
-  },
-  {
-    id: 'demo-api',
-    source: 'mq-target',
-    target: 'api-target',
+    id: 'api-1',
+    source: 'comp-1-1',
+    target: 'comp-2-1',
     type: 'api',
     reconnectable: true,
     data: {
-      usedEndpoints: ['GET /api/data', 'POST /api/process'],
-      centerLabel: 'API Integration'
+      usedEndpoints: ['GET /api/credit', 'POST /api/validate'],
+      centerLabel: '1c→10c'
     }
   },
   {
-    id: 'demo-kafka-pub',
-    source: 'kafka-source',
-    target: 'kafka-topic',
-    type: 'kafka_pub',
+    id: 'api-2',
+    source: 'comp-2-1',
+    target: 'comp-3-1',
+    type: 'api',
     reconnectable: true,
     data: {
-      centerLabel: 'Kafka Publisher'
+      usedEndpoints: ['GET /api/ini'],
+      centerLabel: '2c→9c'
     }
   },
   {
-    id: 'demo-kafka-sub',
-    source: 'kafka-topic',
-    target: 'kafka-sub-target',
-    type: 'kafka_sub',
+    id: 'api-3',
+    source: 'comp-3-1',
+    target: 'comp-4-1',
+    type: 'api',
     reconnectable: true,
     data: {
-      centerLabel: 'Kafka Subscriber'
+      usedEndpoints: ['POST /api/webservice'],
+      centerLabel: '3c→8c'
     }
   },
   {
-    id: 'demo-manual',
-    source: 'manual-source',
-    target: 'external-source',
-    type: 'manual',
+    id: 'api-4',
+    source: 'comp-1-2',
+    target: 'comp-2-2',
+    type: 'api',
     reconnectable: true,
     data: {
-      centerLabel: 'Manual Entry'
+      usedEndpoints: ['GET /api/funds'],
+      centerLabel: '11c→18c'
     }
   },
   {
-    id: 'demo-external',
-    source: 'external-source',
-    target: 'final-output',
-    type: 'external',
+    id: 'api-5',
+    source: 'comp-2-2',
+    target: 'comp-3-2',
+    type: 'api',
     reconnectable: true,
     data: {
-      centerLabel: 'External Entry'
+      centerLabel: '12c→17c'
     }
-  }
+  },
+  {
+    id: 'api-6',
+    source: 'comp-3-2',
+    target: 'comp-4-2',
+    type: 'api',
+    reconnectable: true,
+    data: {
+      centerLabel: '13c→16c'
+    }
+  },
+  {
+    id: 'api-7',
+    source: 'comp-4-1',
+    target: 'comp-4-2',
+    type: 'api',
+    reconnectable: true,
+    data: {
+      centerLabel: '5c→6c'
+    }
+  },
+  {
+    id: 'api-8',
+    source: 'comp-4-2',
+    target: 'comp-4-3',
+    type: 'api',
+    reconnectable: true,
+    data: {
+      centerLabel: '4c→7c'
+    }
+  },
+  {
+    id: 'api-9',
+    source: 'comp-4-2',
+    target: 'comp-5-1',
+    type: 'api',
+    reconnectable: true,
+    data: {
+      centerLabel: '14c→15c'
+    }
+  },
+
+  // Connexions CFT (jaune)
+  {
+    id: 'cft-1',
+    source: 'external-1',
+    target: 'kafka-topic-1',
+    type: 'cft',
+    reconnectable: true,
+    data: {
+      fromControlMJob: 'BATCH_001',
+      toControlM: 'KAFKA_PROD',
+      fromPath: '/data/input',
+      toPath: '/kafka/topic',
+      centerLabel: '1d'
+    }
+  },
+  {
+    id: 'cft-2',
+    source: 'kafka-topic-1',
+    target: 'kafka-topic-2',
+    type: 'cft',
+    reconnectable: true,
+    data: {
+      fromControlMJob: 'KAFKA_001',
+      toControlM: 'KAFKA_002',
+      centerLabel: '2d'
+    }
+  },
+  {
+    id: 'cft-3',
+    source: 'kafka-topic-2',
+    target: 'external-2',
+    type: 'cft',
+    reconnectable: true,
+    data: {
+      fromControlMJob: 'KAFKA_002',
+      toControlM: 'EXT_SYS',
+      centerLabel: '3d'
+    }
+  },
+
+  // Quelques connexions MQ pour l'exemple
+  {
+    id: 'mq-1',
+    source: 'comp-2-3',
+    target: 'kafka-topic-1',
+    type: 'mq',
+    reconnectable: true,
+    data: {
+      centerLabel: 'Queue Message'
+    }
+  },
 ];
 
 export const edgeTypes = {

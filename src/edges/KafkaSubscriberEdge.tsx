@@ -10,7 +10,7 @@ export const KafkaSubscriberEdge: React.FC<EdgeProps> = (props) => {
     <BaseCustomEdge
       {...props}
       data={data}
-      height="wide"
+      height="default"
       color="yellow"
       hasStartMarker={false}
       hasEndMarker={true}

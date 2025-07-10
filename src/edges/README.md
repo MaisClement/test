@@ -6,7 +6,7 @@ Ce projet inclut plusieurs types d'edges personnalisés pour représenter diffé
 
 ### 1. CFT Transfers (`cft`)
 - **Couleur**: Rouge
-- **Hauteur**: Wide
+- **Hauteur**: default
 - **Marqueurs**: Flèche de fin uniquement
 - **Label central**: Oui
 - **Props spécifiques**:
@@ -17,13 +17,13 @@ Ce projet inclut plusieurs types d'edges personnalisés pour représenter diffé
 
 ### 2. MQ (`mq`)
 - **Couleur**: Gris
-- **Hauteur**: Wider
+- **Hauteur**: defaultr
 - **Marqueurs**: Flèche de fin uniquement
 - **Label central**: Oui
 
 ### 3. API Call / GRPC (`api`)
 - **Couleur**: Turquoise
-- **Hauteur**: Wide
+- **Hauteur**: default
 - **Marqueurs**: Flèches de début et de fin
 - **Label central**: Oui
 - **Props spécifiques**:
@@ -31,13 +31,13 @@ Ce projet inclut plusieurs types d'edges personnalisés pour représenter diffé
 
 ### 4. Kafka Publisher (`kafka_pub`)
 - **Couleur**: Violet
-- **Hauteur**: Wide
+- **Hauteur**: default
 - **Marqueurs**: Flèche de fin uniquement
 - **Label central**: Oui
 
 ### 5. Kafka Subscriber (`kafka_sub`)
 - **Couleur**: Jaune
-- **Hauteur**: Wide
+- **Hauteur**: default
 - **Marqueurs**: Flèche de fin uniquement
 - **Label central**: Oui
 
@@ -129,7 +129,7 @@ interface ApiEdgeData extends CustomEdgeData {
 
 Chaque edge peut être personnalisé en modifiant ses props dans le fichier correspondant. Les hauteurs disponibles sont:
 - `default`: 2px
-- `wide`: 4px
-- `wider`: 6px
+- `default`: 4px
+- `defaultr`: 6px
 
 Les couleurs disponibles sont définies dans le type `EdgeColor` et incluent toutes les couleurs utilisées par les différents types d'edges.

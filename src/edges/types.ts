@@ -17,5 +17,5 @@ export interface ApiEdgeData extends CustomEdgeData {
   usedEndpoints?: string[];
 }
 
-export type EdgeHeight = 'default' | 'wide' | 'wider';
+export type EdgeHeight = 'default' | 'default' | 'defaultr';
 export type EdgeColor = 'red' | 'grey' | 'turquoise' | 'purple' | 'yellow' | 'green';

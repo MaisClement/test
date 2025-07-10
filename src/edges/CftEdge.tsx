@@ -10,8 +10,8 @@ export const CftEdge: React.FC<EdgeProps> = (props) => {
     <BaseCustomEdge
       {...props}
       data={data}
-      height="wide"
-      color="red"
+      height="default"
+      color="yellow"
       hasStartMarker={false}
       hasEndMarker={true}
       hasCenterLabel={true}

@@ -23,9 +23,9 @@ interface BaseCustomEdgeProps extends Omit<EdgeProps, 'data'> {
 
 const getStrokeWidth = (height: EdgeHeight) => {
   switch (height) {
-    case 'wider':
+    case 'defaultr':
       return 6;
-    case 'wide':
+    case 'default':
       return 4;
     case 'default':
     default:

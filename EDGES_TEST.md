@@ -8,11 +8,11 @@ Le serveur de développement fonctionne sur : **http://localhost:5174/**
 
 ## 📊 Edges personnalisés disponibles
 
-1. **CFT Transfers** (`cft`) - Rouge, wide, avec informations de transfert
-2. **MQ** (`mq`) - Gris, wider, pour les messages de queue
-3. **API Call/GRPC** (`api`) - Turquoise, wide, avec marqueurs des deux côtés
-4. **Kafka Publisher** (`kafka_pub`) - Violet, wide
-5. **Kafka Subscriber** (`kafka_sub`) - Jaune, wide
+1. **CFT Transfers** (`cft`) - Rouge, default, avec informations de transfert
+2. **MQ** (`mq`) - Gris, defaultr, pour les messages de queue
+3. **API Call/GRPC** (`api`) - Turquoise, default, avec marqueurs des deux côtés
+4. **Kafka Publisher** (`kafka_pub`) - Violet, default
+5. **Kafka Subscriber** (`kafka_sub`) - Jaune, default
 6. **Manual Entry** (`manual`) - Rouge, default
 7. **External Entry** (`external`) - Vert, default
 
@@ -44,7 +44,7 @@ import App from './EdgesDemoFlow.tsx'
 ## 🎨 Caractéristiques visibles
 
 - **Couleurs distinctes** pour chaque type d'edge
-- **Épaisseurs différentes** (default, wide, wider)
+- **Épaisseurs différentes** (default, default, defaultr)
 - **Flèches de début/fin** selon les spécifications
 - **Labels centraux personnalisés** avec informations contextuelles
 - **Données spécifiques** pour CFT (jobs, paths) et API (endpoints)

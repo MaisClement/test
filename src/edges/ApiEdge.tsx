@@ -10,7 +10,7 @@ export const ApiEdge: React.FC<EdgeProps> = (props) => {
     <BaseCustomEdge
       {...props}
       data={data}
-      height="wide"
+      height="default"
       color="turquoise"
       hasStartMarker={false}
       hasEndMarker={true}

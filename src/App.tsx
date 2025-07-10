@@ -114,7 +114,7 @@ export default function App() {
           let didSnapY = false;
 
           currentNodesSnapshot.forEach(node => {
-            if (node.id === draggingNodeId || node.type === 'group') return;
+            if (node.id === draggingNodeId || (node.type === 'group' && node.type === 'app')) return;
 
             let targetNodeAbsoluteX = node.position.x;
             let targetNodeAbsoluteY = node.position.y;
@@ -225,7 +225,7 @@ export default function App() {
             const draggingNodeCenterY = finalDraggingNodeAbsoluteY + draggingNodeHeight / 2;
 
             currentNodesSnapshot.forEach(node => {
-              if (node.id === draggingNodeId || node.type === 'group') return;
+              if (node.id === draggingNodeId || (node.type === 'group' && node.type === 'app')) return;
 
               let targetNodeAbsoluteX = node.position.x;
               let targetNodeAbsoluteY = node.position.y;
@@ -344,7 +344,7 @@ export default function App() {
           const nodeCenterY = finalNodeAbsoluteY + (nodeHeight / 2);
 
           const targetGroup = updatedProcessedNodes.find((n) => {
-            if (n.type !== 'group' || nodeId === n.id) return false;
+            if ((n.type !== 'group' && n.type !== 'app') || nodeId === n.id) return false;
             const groupX = n.position.x;
             const groupY = n.position.y;
             const groupW = typeof n.width === 'number' ? n.width : typeof n.style?.width === 'number' ? n.style.width : 200;
@@ -377,8 +377,8 @@ export default function App() {
       });
 
       updatedProcessedNodes = [
-        ...updatedProcessedNodes.filter((n) => n.type === 'group'),
-        ...updatedProcessedNodes.filter((n) => n.type !== 'group'),
+        ...updatedProcessedNodes.filter((n) => n.type === 'group' || n.type === 'app'),
+        ...updatedProcessedNodes.filter((n) => n.type !== 'group' && n.type !== 'app'),
       ];
 
       return updatedProcessedNodes;
@@ -405,24 +405,24 @@ export default function App() {
     setNodes((currentNodes) => {
       const updatedNodes = [...currentNodes];
       
-      // Find all group nodes
-      const groupNodes = updatedNodes.filter(node => node.type === 'group');
+      // Find all group and app nodes
+      const containerNodes = updatedNodes.filter(node => node.type === 'group' || node.type === 'app');
       
-      groupNodes.forEach(group => {
-        // Find all nodes that belong to this group
-        const groupChildren = updatedNodes.filter(node => node.parentId === group.id);
+      containerNodes.forEach(container => {
+        // Find all nodes that belong to this container
+        const containerChildren = updatedNodes.filter(node => node.parentId === container.id);
         
-        if (groupChildren.length === 0) return;
+        if (containerChildren.length === 0) return;
         
-        // Get group dimensions
-        const groupWidth = typeof group.width === 'number' ? group.width : 200;
-        const groupHeight = typeof group.height === 'number' ? group.height : 200;
+        // Get container dimensions
+        const containerWidth = typeof container.width === 'number' ? container.width : 200;
+        const containerHeight = typeof container.height === 'number' ? container.height : 200;
         
-        // Determine orientation based on group aspect ratio
-        const isHorizontalLayout = groupWidth > groupHeight;
+        // Determine orientation based on container aspect ratio
+        const isHorizontalLayout = containerWidth > containerHeight;
         
         // Calculate dimensions for each child node and sort them to preserve order
-        const childrenWithDimensions = groupChildren.map(child => {
+        const childrenWithDimensions = containerChildren.map(child => {
           const childWidth = typeof child.width === 'number' ? child.width : 
                             typeof child.style?.width === 'number' ? child.style.width : 150;
           const childHeight = typeof child.height === 'number' ? child.height : 
@@ -445,21 +445,21 @@ export default function App() {
         const bottomMargin = 10;
         const uniformSpacing = 10; // Espacement uniforme entre tous les nœuds
         
-        // Calculer les dimensions nécessaires pour le groupe
+        // Calculer les dimensions nécessaires pour le conteneur
         const maxNodeWidth = Math.max(...childrenWithDimensions.map(child => child.calculatedWidth));
         const maxNodeHeight = Math.max(...childrenWithDimensions.map(child => child.calculatedHeight));
         const totalNodeWidth = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedWidth, 0);
         const totalNodeHeight = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedHeight, 0);
         const totalSpacingNeeded = (childrenWithDimensions.length - 1) * uniformSpacing;
         
-        let newGroupWidth: number;
-        let newGroupHeight: number;
+        let newContainerWidth: number;
+        let newContainerHeight: number;
         
         if (isHorizontalLayout) {
           // Pour un layout horizontal: largeur = somme des largeurs + espacement + marges
-          newGroupWidth = totalNodeWidth + totalSpacingNeeded + (2 * sideMargin);
+          newContainerWidth = totalNodeWidth + totalSpacingNeeded + (2 * sideMargin);
           // Hauteur = hauteur du plus grand nœud + marges
-          newGroupHeight = maxNodeHeight + topMargin + bottomMargin;
+          newContainerHeight = maxNodeHeight + topMargin + bottomMargin;
           
           // Position nodes horizontally
           let currentX = sideMargin;
@@ -481,9 +481,9 @@ export default function App() {
           
         } else {
           // Pour un layout vertical: largeur = largeur du plus grand nœud + marges
-          newGroupWidth = maxNodeWidth + (2 * sideMargin);
+          newContainerWidth = maxNodeWidth + (2 * sideMargin);
           // Hauteur = somme des hauteurs + espacement + marges
-          newGroupHeight = totalNodeHeight + totalSpacingNeeded + topMargin + bottomMargin;
+          newContainerHeight = totalNodeHeight + totalSpacingNeeded + topMargin + bottomMargin;
           
           // Position nodes vertically
           let currentY = topMargin;
@@ -504,13 +504,13 @@ export default function App() {
           });
         }
         
-        // Redimensionner le groupe aux nouvelles dimensions calculées
-        const groupIndex = updatedNodes.findIndex(n => n.id === group.id);
-        if (groupIndex !== -1) {
-          updatedNodes[groupIndex] = {
-            ...updatedNodes[groupIndex],
-            width: newGroupWidth,
-            height: newGroupHeight
+        // Redimensionner le conteneur aux nouvelles dimensions calculées
+        const containerIndex = updatedNodes.findIndex(n => n.id === container.id);
+        if (containerIndex !== -1) {
+          updatedNodes[containerIndex] = {
+            ...updatedNodes[containerIndex],
+            width: newContainerWidth,
+            height: newContainerHeight
           };
         }
       });
@@ -524,19 +524,19 @@ export default function App() {
     setNodes((currentNodes) => {
       const updatedNodes = [...currentNodes];
       
-      // 1. D'abord, réorganiser tous les groupes avec la même logique que handleReorganizeNodes
-      const groupNodes = updatedNodes.filter(node => node.type === 'group');
+      // 1. D'abord, réorganiser tous les groupes et applications avec la même logique que handleReorganizeNodes
+      const containerNodes = updatedNodes.filter(node => node.type === 'group' || node.type === 'app');
       
-      groupNodes.forEach(group => {
-        const groupChildren = updatedNodes.filter(node => node.parentId === group.id);
+      containerNodes.forEach(container => {
+        const containerChildren = updatedNodes.filter(node => node.parentId === container.id);
         
-        if (groupChildren.length === 0) return;
+        if (containerChildren.length === 0) return;
         
-        const groupWidth = typeof group.width === 'number' ? group.width : 200;
-        const groupHeight = typeof group.height === 'number' ? group.height : 200;
-        const isHorizontalLayout = groupWidth > groupHeight;
+        const containerWidth = typeof container.width === 'number' ? container.width : 200;
+        const containerHeight = typeof container.height === 'number' ? container.height : 200;
+        const isHorizontalLayout = containerWidth > containerHeight;
         
-        const childrenWithDimensions = groupChildren.map(child => {
+        const childrenWithDimensions = containerChildren.map(child => {
           const childWidth = typeof child.width === 'number' ? child.width : 
                             typeof child.style?.width === 'number' ? child.style.width : 150;
           const childHeight = typeof child.height === 'number' ? child.height : 
@@ -561,12 +561,12 @@ export default function App() {
         const totalNodeHeight = childrenWithDimensions.reduce((sum, child) => sum + child.calculatedHeight, 0);
         const totalSpacingNeeded = (childrenWithDimensions.length - 1) * uniformSpacing;
         
-        let newGroupWidth: number;
-        let newGroupHeight: number;
+        let newContainerWidth: number;
+        let newContainerHeight: number;
         
         if (isHorizontalLayout) {
-          newGroupWidth = totalNodeWidth + totalSpacingNeeded + (2 * sideMargin);
-          newGroupHeight = maxNodeHeight + topMargin + bottomMargin;
+          newContainerWidth = totalNodeWidth + totalSpacingNeeded + (2 * sideMargin);
+          newContainerHeight = maxNodeHeight + topMargin + bottomMargin;
           
           let currentX = sideMargin;
           childrenWithDimensions.forEach(child => {
@@ -581,8 +581,8 @@ export default function App() {
             currentX += child.calculatedWidth + uniformSpacing;
           });
         } else {
-          newGroupWidth = maxNodeWidth + (2 * sideMargin);
-          newGroupHeight = totalNodeHeight + totalSpacingNeeded + topMargin + bottomMargin;
+          newContainerWidth = maxNodeWidth + (2 * sideMargin);
+          newContainerHeight = totalNodeHeight + totalSpacingNeeded + topMargin + bottomMargin;
           
           let currentY = topMargin;
           childrenWithDimensions.forEach(child => {
@@ -598,12 +598,12 @@ export default function App() {
           });
         }
         
-        const groupIndex = updatedNodes.findIndex(n => n.id === group.id);
-        if (groupIndex !== -1) {
-          updatedNodes[groupIndex] = {
-            ...updatedNodes[groupIndex],
-            width: newGroupWidth,
-            height: newGroupHeight
+        const containerIndex = updatedNodes.findIndex(n => n.id === container.id);
+        if (containerIndex !== -1) {
+          updatedNodes[containerIndex] = {
+            ...updatedNodes[containerIndex],
+            width: newContainerWidth,
+            height: newContainerHeight
           };
         }
       });
@@ -676,10 +676,10 @@ export default function App() {
         });
       }
       
-      // S'assurer que les groupes sont en arrière-plan
+      // S'assurer que les groupes et applications sont en arrière-plan
       return [
-        ...updatedNodes.filter((n) => n.type === 'group'),
-        ...updatedNodes.filter((n) => n.type !== 'group'),
+        ...updatedNodes.filter((n) => n.type === 'group' || n.type === 'app'),
+        ...updatedNodes.filter((n) => n.type !== 'group' && n.type !== 'app'),
       ];
     });
   }, [setNodes, edges]);
