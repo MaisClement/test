@@ -83,6 +83,7 @@ export default function App() {
   
   // États pour le mode dessin
   const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [isEraserMode, setIsEraserMode] = useState(false);
   const [currentDrawing, setCurrentDrawing] = useState<number[][]>([]);
   const [currentDrawingScreen, setCurrentDrawingScreen] = useState<number[][]>([]); // Pour l'affichage temporaire
   const [isDrawing, setIsDrawing] = useState(false);
@@ -770,6 +771,16 @@ export default function App() {
   // Fonction pour basculer le mode dessin
   const toggleDrawingMode = useCallback(() => {
     setIsDrawingMode(prev => !prev);
+    setIsEraserMode(false); // Désactiver le mode gomme si activé
+    setCurrentDrawing([]);
+    setCurrentDrawingScreen([]);
+    setIsDrawing(false);
+  }, []);
+
+  // Fonction pour basculer le mode gomme
+  const toggleEraserMode = useCallback(() => {
+    setIsEraserMode(prev => !prev);
+    setIsDrawingMode(false); // Désactiver le mode dessin si activé
     setCurrentDrawing([]);
     setCurrentDrawingScreen([]);
     setIsDrawing(false);
@@ -778,6 +789,7 @@ export default function App() {
   // Fonction pour convertir les coordonnées écran en coordonnées ReactFlow
   const getFlowCoordinates = useCallback((clientX: number, clientY: number) => {
     const reactFlowInstance = reactFlowInstanceRef.current;
+    console.log({ x: clientX, y: clientY });
     if (!reactFlowInstance) return { x: clientX, y: clientY };
     
     const bounds = document.querySelector('.react-flow')?.getBoundingClientRect();
@@ -802,38 +814,95 @@ export default function App() {
     };
   }, []);
 
-  // Gestionnaires d'événements de dessin
+  // Fonction pour trouver le DrawingNode sous les coordonnées données
+  const getDrawingNodeUnderPoint = useCallback((flowX: number, flowY: number) => {
+    return nodes.find(node => {
+      if (node.type !== 'drawing') return false;
+      
+      const nodeX = node.position.x;
+      const nodeY = node.position.y;
+      const nodeWidth = node.width || 150;
+      const nodeHeight = node.height || 40;
+      
+      return (
+        flowX >= nodeX &&
+        flowX <= nodeX + nodeWidth &&
+        flowY >= nodeY &&
+        flowY <= nodeY + nodeHeight
+      );
+    });
+  }, [nodes]);
+
+  // Gestionnaires d'événements de dessin et gomme
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
-    if (!isDrawingMode) return;
+    if (!isDrawingMode && !isEraserMode) return;
     
     event.preventDefault();
-    setIsDrawing(true);
     
-    // Capturer à la fois les coordonnées flow et screen
-    const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
-    const screenCoords = getScreenCoordinates(event.clientX, event.clientY);
-    
-    setCurrentDrawing([[flowCoords.x, flowCoords.y, 0.5]]);
-    setCurrentDrawingScreen([[screenCoords.x, screenCoords.y, 0.5]]);
-  }, [isDrawingMode, getFlowCoordinates, getScreenCoordinates]);
+    if (isEraserMode) {
+      // Mode gomme : supprimer le DrawingNode sous le curseur
+      const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
+      const nodeToErase = getDrawingNodeUnderPoint(flowCoords.x, flowCoords.y);
+      
+      if (nodeToErase) {
+        setNodes(nodes => nodes.filter(node => node.id !== nodeToErase.id));
+        setEdges(edges => edges.filter(edge => 
+          edge.source !== nodeToErase.id && edge.target !== nodeToErase.id
+        ));
+      }
+      
+      setIsDrawing(true); // Pour permettre l'effacement continu
+    } else {
+      // Mode dessin normal
+      setIsDrawing(true);
+      
+      // Capturer à la fois les coordonnées flow et screen
+      const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
+      const screenCoords = getScreenCoordinates(event.clientX, event.clientY);
+      
+      setCurrentDrawing([[flowCoords.x, flowCoords.y, 0.5]]);
+      setCurrentDrawingScreen([[screenCoords.x, screenCoords.y, 0.5]]);
+    }
+  }, [isDrawingMode, isEraserMode, getFlowCoordinates, getScreenCoordinates, getDrawingNodeUnderPoint, setNodes, setEdges]);
 
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
-    if (!isDrawingMode || !isDrawing) return;
+    if ((!isDrawingMode && !isEraserMode) || !isDrawing) return;
     
     event.preventDefault();
     
-    // Capturer à la fois les coordonnées flow et screen
-    const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
-    const screenCoords = getScreenCoordinates(event.clientX, event.clientY);
-    
-    setCurrentDrawing(prev => [...prev, [flowCoords.x, flowCoords.y, 0.5]]);
-    setCurrentDrawingScreen(prev => [...prev, [screenCoords.x, screenCoords.y, 0.5]]);
-  }, [isDrawingMode, isDrawing, getFlowCoordinates, getScreenCoordinates]);
+    if (isEraserMode) {
+      // Mode gomme : supprimer les DrawingNode sous le curseur pendant le mouvement
+      const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
+      const nodeToErase = getDrawingNodeUnderPoint(flowCoords.x, flowCoords.y);
+      
+      if (nodeToErase) {
+        setNodes(nodes => nodes.filter(node => node.id !== nodeToErase.id));
+        setEdges(edges => edges.filter(edge => 
+          edge.source !== nodeToErase.id && edge.target !== nodeToErase.id
+        ));
+      }
+    } else {
+      // Mode dessin normal
+      // Capturer à la fois les coordonnées flow et screen
+      const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
+      const screenCoords = getScreenCoordinates(event.clientX, event.clientY);
+      
+      setCurrentDrawing(prev => [...prev, [flowCoords.x, flowCoords.y, 0.5]]);
+      setCurrentDrawingScreen(prev => [...prev, [screenCoords.x, screenCoords.y, 0.5]]);
+    }
+  }, [isDrawingMode, isEraserMode, isDrawing, getFlowCoordinates, getScreenCoordinates, getDrawingNodeUnderPoint, setNodes, setEdges]);
 
   const handleMouseUp = useCallback(() => {
-    if (!isDrawingMode || !isDrawing) return;
+    if ((!isDrawingMode && !isEraserMode) || !isDrawing) return;
     
     setIsDrawing(false);
+    
+    // En mode gomme, pas besoin de créer un dessin
+    if (isEraserMode) {
+      setCurrentDrawing([]);
+      setCurrentDrawingScreen([]);
+      return;
+    }
     
     if (currentDrawing.length > 1) {
       // Générer le chemin SVG avec perfect-freehand
@@ -874,7 +943,7 @@ export default function App() {
     
     setCurrentDrawing([]);
     setCurrentDrawingScreen([]);
-  }, [isDrawingMode, isDrawing, currentDrawing, setNodes]);
+  }, [isDrawingMode, isEraserMode, isDrawing, currentDrawing, setNodes]);
 
   const getDefaultLabel = (edgeType: string): string => {
     const labelMap: { [key: string]: string } = {
@@ -923,10 +992,24 @@ export default function App() {
             border: 'none', 
             padding: '8px 12px', 
             borderRadius: '4px', 
-            cursor: 'pointer' 
+            cursor: 'pointer',
+            marginRight: '8px'
           }}
         >
           {isDrawingMode ? '✏️ Drawing ON' : '✏️ Drawing OFF'}
+        </button>
+        <button 
+          onClick={toggleEraserMode} 
+          style={{ 
+            backgroundColor: isEraserMode ? '#ff6b6b' : '#f39c12', 
+            color: 'white', 
+            border: 'none', 
+            padding: '8px 12px', 
+            borderRadius: '4px', 
+            cursor: 'pointer' 
+          }}
+        >
+          {isEraserMode ? '🧹 Eraser ON' : '🧹 Eraser OFF'}
         </button>
       </div>
       
@@ -945,14 +1028,14 @@ export default function App() {
         reconnectRadius={20}
         defaultEdgeOptions={{ reconnectable: true }}
         fitView
-        // Désactiver les interactions de pan en mode dessin
-        panOnDrag={!isDrawingMode}
-        // Ajouter les gestionnaires d'événements de dessin
+        // Désactiver les interactions de pan en mode dessin ou gomme
+        panOnDrag={!isDrawingMode && !isEraserMode}
+        // Ajouter les gestionnaires d'événements de dessin et gomme
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        // Changer le curseur en mode dessin
-        style={{ cursor: isDrawingMode ? 'crosshair' : 'default' }}
+        // Changer le curseur selon le mode actif
+        style={{ cursor: isDrawingMode ? 'crosshair' : isEraserMode ? 'pointer' : 'default' }}
       >
         <Panel position="top-right">
           <button onClick={handleDebug} style={{ zIndex: 10, marginRight: '10px' }}>
