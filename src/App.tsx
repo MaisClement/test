@@ -14,12 +14,14 @@ import {
   type Edge,
 } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
+import { getStroke } from 'perfect-freehand';
 
 import '@xyflow/react/dist/style.css';
 
 import { initialNodes, nodeTypes, AppNode } from './nodes';
 import { initialEdges, edgeTypes } from './edges';
 import { EdgeTypeSelector } from './components/EdgeTypeSelector';
+import type { DrawingNode } from './nodes/DrawingNode';
 
 interface HelperLine {
   id: string;
@@ -32,6 +34,43 @@ interface HelperLine {
 
 const SNAP_THRESHOLD = 5; // Tolérance en pixels pour afficher les lignes
 
+// Fonction utilitaire pour convertir un stroke en chemin SVG
+function getSvgPathFromStroke(stroke: number[][], bounds?: { x: number; y: number; width: number; height: number }): string {
+  if (!stroke.length) return '';
+
+  const d = stroke.reduce(
+    (acc, [x0, y0], i) => {
+      // Si des bounds sont fournis, faire les coordonnées relatives à la boîte englobante
+      const x = bounds ? x0 - bounds.x : x0;
+      const y = bounds ? y0 - bounds.y : y0;
+      return acc + (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+    },
+    ''
+  );
+
+  return d + ' Z';
+}
+
+// Fonction utilitaire pour calculer les dimensions d'un dessin
+function getDrawingBounds(points: number[][]): { x: number; y: number; width: number; height: number } {
+  if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 };
+  
+  const xs = points.map(p => p[0]);
+  const ys = points.map(p => p[1]);
+  
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  
+  return {
+    x: minX,
+    y: minY,
+    width: Math.max(maxX - minX, 10), // Minimum 10px de largeur
+    height: Math.max(maxY - minY, 10), // Minimum 10px de hauteur
+  };
+}
+
 export default function App() {
   const edgeReconnectSuccessful = useRef(true);
   const reactFlowInstanceRef = useRef<ReactFlowInstance<AppNode, Edge> | null>(null);
@@ -41,6 +80,12 @@ export default function App() {
   const [helperLines, setHelperLines] = useState<HelperLine[]>([]);
   const [isEdgeTypeSelectorOpen, setIsEdgeTypeSelectorOpen] = useState(false);
   const [pendingConnection, setPendingConnection] = useState<{ source: string; target: string } | null>(null);
+  
+  // États pour le mode dessin
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [currentDrawing, setCurrentDrawing] = useState<number[][]>([]);
+  const [currentDrawingScreen, setCurrentDrawingScreen] = useState<number[][]>([]); // Pour l'affichage temporaire
+  const [isDrawing, setIsDrawing] = useState(false);
 
 
   const onConnect: OnConnect = useCallback(
@@ -114,7 +159,7 @@ export default function App() {
           let didSnapY = false;
 
           currentNodesSnapshot.forEach(node => {
-            if (node.id === draggingNodeId || (node.type === 'group' && node.type === 'app')) return;
+            if (node.id === draggingNodeId || (node.type === 'group' || node.type === 'app')) return;
 
             let targetNodeAbsoluteX = node.position.x;
             let targetNodeAbsoluteY = node.position.y;
@@ -225,7 +270,7 @@ export default function App() {
             const draggingNodeCenterY = finalDraggingNodeAbsoluteY + draggingNodeHeight / 2;
 
             currentNodesSnapshot.forEach(node => {
-              if (node.id === draggingNodeId || (node.type === 'group' && node.type === 'app')) return;
+              if (node.id === draggingNodeId || (node.type === 'group' || node.type === 'app')) return;
 
               let targetNodeAbsoluteX = node.position.x;
               let targetNodeAbsoluteY = node.position.y;
@@ -722,6 +767,115 @@ export default function App() {
     setIsEdgeTypeSelectorOpen(false);
   }, []);
 
+  // Fonction pour basculer le mode dessin
+  const toggleDrawingMode = useCallback(() => {
+    setIsDrawingMode(prev => !prev);
+    setCurrentDrawing([]);
+    setCurrentDrawingScreen([]);
+    setIsDrawing(false);
+  }, []);
+
+  // Fonction pour convertir les coordonnées écran en coordonnées ReactFlow
+  const getFlowCoordinates = useCallback((clientX: number, clientY: number) => {
+    const reactFlowInstance = reactFlowInstanceRef.current;
+    if (!reactFlowInstance) return { x: clientX, y: clientY };
+    
+    const bounds = document.querySelector('.react-flow')?.getBoundingClientRect();
+    if (!bounds) return { x: clientX, y: clientY };
+    
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: clientX - bounds.left,
+      y: clientY - bounds.top,
+    });
+    
+    return position;
+  }, []);
+
+  // Fonction pour convertir les coordonnées écran en coordonnées relatives au container
+  const getScreenCoordinates = useCallback((clientX: number, clientY: number) => {
+    const bounds = document.querySelector('.react-flow')?.getBoundingClientRect();
+    if (!bounds) return { x: clientX, y: clientY };
+    
+    return {
+      x: clientX - bounds.left,
+      y: clientY - bounds.top,
+    };
+  }, []);
+
+  // Gestionnaires d'événements de dessin
+  const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (!isDrawingMode) return;
+    
+    event.preventDefault();
+    setIsDrawing(true);
+    
+    // Capturer à la fois les coordonnées flow et screen
+    const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
+    const screenCoords = getScreenCoordinates(event.clientX, event.clientY);
+    
+    setCurrentDrawing([[flowCoords.x, flowCoords.y, 0.5]]);
+    setCurrentDrawingScreen([[screenCoords.x, screenCoords.y, 0.5]]);
+  }, [isDrawingMode, getFlowCoordinates, getScreenCoordinates]);
+
+  const handleMouseMove = useCallback((event: React.MouseEvent) => {
+    if (!isDrawingMode || !isDrawing) return;
+    
+    event.preventDefault();
+    
+    // Capturer à la fois les coordonnées flow et screen
+    const flowCoords = getFlowCoordinates(event.clientX, event.clientY);
+    const screenCoords = getScreenCoordinates(event.clientX, event.clientY);
+    
+    setCurrentDrawing(prev => [...prev, [flowCoords.x, flowCoords.y, 0.5]]);
+    setCurrentDrawingScreen(prev => [...prev, [screenCoords.x, screenCoords.y, 0.5]]);
+  }, [isDrawingMode, isDrawing, getFlowCoordinates, getScreenCoordinates]);
+
+  const handleMouseUp = useCallback(() => {
+    if (!isDrawingMode || !isDrawing) return;
+    
+    setIsDrawing(false);
+    
+    if (currentDrawing.length > 1) {
+      // Générer le chemin SVG avec perfect-freehand
+      const stroke = getStroke(currentDrawing, {
+        size: 4,
+        thinning: 0.5,
+        smoothing: 0.6,
+        streamline: 0.6,
+        easing: (t: number) => t, // Linear easing
+      });
+
+      // Calculer les dimensions du dessin d'abord
+      const bounds = getDrawingBounds(currentDrawing);
+      
+      // Créer un chemin SVG relatif à la boîte englobante
+      const pathData = stroke.length ? getSvgPathFromStroke(stroke, bounds) : '';
+      
+      if (pathData) {
+        // Créer un nouveau node de dessin
+        const newNode: DrawingNode = {
+          id: `drawing-${Date.now()}`,
+          type: 'drawing',
+          position: { x: bounds.x, y: bounds.y },
+          data: {
+            svgPath: pathData,
+            originalWidth: bounds.width,
+            originalHeight: bounds.height,
+            strokeColor: '#000000',
+            fillColor: '#000000', // Remplissage noir
+          },
+          width: bounds.width,
+          height: bounds.height,
+        };
+        
+        setNodes(nodes => [...nodes, newNode]);
+      }
+    }
+    
+    setCurrentDrawing([]);
+    setCurrentDrawingScreen([]);
+  }, [isDrawingMode, isDrawing, currentDrawing, setNodes]);
+
   const getDefaultLabel = (edgeType: string): string => {
     const labelMap: { [key: string]: string } = {
       cft: 'CFT Transfer',
@@ -737,7 +891,6 @@ export default function App() {
 
   return (
     <>
-      {/* Bouton Fit View en dehors de ReactFlow */}
       <div style={{ 
         position: 'absolute', 
         top: '10px', 
@@ -756,10 +909,24 @@ export default function App() {
             border: 'none', 
             padding: '8px 12px', 
             borderRadius: '4px', 
-            cursor: 'pointer' 
+            cursor: 'pointer',
+            marginRight: '8px'
           }}
         >
           Fit View
+        </button>
+        <button 
+          onClick={toggleDrawingMode} 
+          style={{ 
+            backgroundColor: isDrawingMode ? '#ff6b6b' : '#4ecdc4', 
+            color: 'white', 
+            border: 'none', 
+            padding: '8px 12px', 
+            borderRadius: '4px', 
+            cursor: 'pointer' 
+          }}
+        >
+          {isDrawingMode ? '✏️ Drawing ON' : '✏️ Drawing OFF'}
         </button>
       </div>
       
@@ -778,6 +945,14 @@ export default function App() {
         reconnectRadius={20}
         defaultEdgeOptions={{ reconnectable: true }}
         fitView
+        // Désactiver les interactions de pan en mode dessin
+        panOnDrag={!isDrawingMode}
+        // Ajouter les gestionnaires d'événements de dessin
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        // Changer le curseur en mode dessin
+        style={{ cursor: isDrawingMode ? 'crosshair' : 'default' }}
       >
         <Panel position="top-right">
           <button onClick={handleDebug} style={{ zIndex: 10, marginRight: '10px' }}>
@@ -814,6 +989,20 @@ export default function App() {
             strokeDasharray="4,4" // Ligne pointillée
           />
         ))}
+        
+        {/* Affichage du dessin en cours */}
+        {isDrawing && currentDrawingScreen.length > 1 && (
+          <path
+            d={currentDrawingScreen.reduce((acc, [x, y], i) => {
+              return acc + (i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`);
+            }, '')}
+            fill="none"
+            stroke="#000000"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        )}
       </svg>
       
       <EdgeTypeSelector

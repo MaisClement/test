@@ -6,8 +6,10 @@ import DefaultNode from './DefaultNode';
 import KafkaTopicNode from './KafkaTopicNode';
 import ApplicationNode from './ApplicationNode';
 import ComponentNode from './ComponentNode';
+import DrawingNode from './DrawingNode';
 
 export type { AppNode, DefaultNode, KafkaTopicNode, ApplicationNode, ComponentNode } from './types';
+export type { DrawingNode } from './DrawingNode';
 import type { AppNode } from './types';
 
 // Données d'exemple reproduisant le schéma avec des blocs plus compacts
@@ -187,5 +189,6 @@ export const nodeTypes = {
   'kafka-topic': KafkaTopicNode,
   'app': ApplicationNode,
   'component': ComponentNode,
+  'drawing': DrawingNode,
   // Add any of your custom nodes here!
 } satisfies NodeTypes;

@@ -1,4 +1,5 @@
 import type { Node, BuiltInNode } from '@xyflow/react';
+import type { DrawingNode } from './DrawingNode';
 
 export type PositionLoggerNode = Node<{ label: string }, 'position-logger'>;
 export type GroupNode = Node<{ label?: string }, 'group'>;
@@ -17,4 +18,4 @@ export type ComponentNode = Node<{
   componentType: 'api' | 'service' | 'database' | 'other';
 }, 'component'>;
 
-export type AppNode = BuiltInNode | PositionLoggerNode | GroupNode | DefaultNode | KafkaTopicNode | ApplicationNode | ComponentNode;
+export type AppNode = BuiltInNode | PositionLoggerNode | GroupNode | DefaultNode | KafkaTopicNode | ApplicationNode | ComponentNode | DrawingNode;
